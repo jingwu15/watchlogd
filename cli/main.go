@@ -1,7 +1,7 @@
 package main
 
 import (
-    "github.com/jingwu15/watchlogd/watchlogd/cmd"
+    "github.com/jingwu15/watchlogd/cli/cmd"
 )
 
 func main() {
