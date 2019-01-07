@@ -1,0 +1,6 @@
+package: github.com/jingwu15/log_queue
+import:
+- package: github.com/fsnotify/fsnotify
+  version: ^1.4.7
+- package: github.com/hpcloud/tail
+  version: ^1.0.0

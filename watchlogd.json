@@ -1,0 +1,13 @@
+{
+    "logdir": "/tmp/",
+    "docpre": "prod_",
+    "logpre": "log_phperror_",
+    "proc_title": "watchlogd",
+    "tail": {
+        "timeout": 10
+    },
+    "beanstalk": {
+        "host": "test.yundun.com",
+        "port" :"11300"
+    }
+}
