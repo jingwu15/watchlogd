@@ -6,6 +6,7 @@ import (
     "fmt"
     "time"
     "strings"
+    //"unicode/utf8"
     "path/filepath"
     "github.com/spf13/viper"
     "github.com/hpcloud/tail"
@@ -48,7 +49,12 @@ func TailToQueue(fkey string, fname string) error {
     isWrite := 1
     isRemove :=  0
     record := map[string]interface{}{}
-    tailConfig := tail.Config{Follow: true, MustExist: false, Location: &tail.SeekInfo{0, os.SEEK_END}, Logger:tail.DiscardingLogger}
+    finfo , err := os.Stat(fname)
+    if err != nil {
+        return err
+    }
+    seek := finfo.Size()
+    tailConfig := tail.Config{Follow: true, MustExist: false, Logger:tail.DiscardingLogger}
 
     watcher, err := fsnotify.NewWatcher()
     if err != nil {
@@ -58,18 +64,21 @@ func TailToQueue(fkey string, fname string) error {
     if err != nil {
         return err
     }
+    tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
     tailHandle, err := tail.TailFile(fname, tailConfig)
     for {
         if isRemove == 1 {
             break
         }
         if isTail == 0 && isWrite == 1 {
+            tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
             tailHandle, _ = tail.TailFile(fname, tailConfig)
             isTail = 1
         }
         select {
         case line, ok := <- tailHandle.Lines:
             if ok {
+                seek = seek + int64(len(line.Text)) + 1
                 row := strings.Split(line.Text, "\t")
                 //json
                 err = json.Decode([]byte(row[1]), &record)
