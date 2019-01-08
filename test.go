@@ -15,6 +15,16 @@ import (
 )
 
 func main() {
+    //fmt.Println(viper.GetString("proc_title"))
+    //watches := viper.Get("watches").([]interface{})
+    //for _, tmp := range watches {
+    //    row := tmp.(map[string]interface{})
+    //    fmt.Println(row)
+    //}
+    //fmt.Println(viper.Get("watches"))
+    //fmt.Println(viper.GetStringMap("watches"))
+    //fmt.Println(viper.GetStringSlice("watches"))
+
     //record := map[string]interface{}{}
     //fp, _ := os.Open("/tmp/log_phperror_sso-backend-server.log")
     //rd := bufio.NewReader(fp)

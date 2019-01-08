@@ -4,6 +4,7 @@ import (
     "os"
     //"log"
     "fmt"
+    "path"
     "time"
     "strings"
     //"unicode/utf8"
@@ -16,23 +17,20 @@ import (
 )
 
 type LogRecord struct {
-    Syskey string
+    Queue string
     Body  []byte
 }
 
-var procExit  = 0
 var total = 0
-var tailFiles = make(map[string]string)
+var tailFiles = make(map[string]map[string]string)
 var logQueue = make(chan LogRecord)
-var logpre = "log_phperror_"
-var docpre = ""
 
 func ToQueue() {
     for {
         select{
         case log, ok := <- logQueue:
             if ok {
-                _, err := beanstalk.Put(docpre + logpre + log.Syskey, log.Body)
+                _, err := beanstalk.Put(log.Queue, log.Body)
                 if err != nil {
                     fmt.Println("ToQueue error: ", err)
                 }
@@ -44,49 +42,50 @@ func ToQueue() {
     }
 }
 
-func TailToQueue(fkey string, fname string) error {
+func TailYpfError(queue string, fpath string) error {
     isTail := 1
     isWrite := 1
     isRemove :=  0
     record := map[string]interface{}{}
-    finfo , err := os.Stat(fname)
+    finfo , err := os.Stat(fpath)
     if err != nil {
         return err
     }
     seek := finfo.Size()
-    tailConfig := tail.Config{Follow: true, MustExist: false, Logger:tail.DiscardingLogger}
+    tailConfig := tail.Config{Follow: true, MustExist: false, Logger: tail.DiscardingLogger}
 
     watcher, err := fsnotify.NewWatcher()
     if err != nil {
         return err
     }
-    err = watcher.Add(fname)
+    err = watcher.Add(fpath)
     if err != nil {
         return err
     }
     tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
-    tailHandle, err := tail.TailFile(fname, tailConfig)
+    tailHandle, err := tail.TailFile(fpath, tailConfig)
     for {
         if isRemove == 1 {
             break
         }
         if isTail == 0 && isWrite == 1 {
             tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
-            tailHandle, _ = tail.TailFile(fname, tailConfig)
+            tailHandle, _ = tail.TailFile(fpath, tailConfig)
             isTail = 1
         }
         select {
         case line, ok := <- tailHandle.Lines:
             if ok {
                 seek = seek + int64(len(line.Text)) + 1
+                fmt.Println(line.Text)
                 row := strings.Split(line.Text, "\t")
                 //json
                 err = json.Decode([]byte(row[1]), &record)
                 if err == nil {
-                    record["syskey"] = fkey
+                    //record["syskey"] = queue      //@todo
                     body, err := json.Encode(record)
                     if err == nil {
-                        logQueue <- LogRecord{Syskey:fkey, Body:body}
+                        logQueue <- LogRecord{Queue:queue, Body:body}
                     }
                 } else {
                     //非json 不处理
@@ -101,7 +100,7 @@ func TailToQueue(fkey string, fname string) error {
             if ok && (event.Op == fsnotify.Remove || event.Op == fsnotify.Rename) {
                 isRemove = 1       //删除/重命名
                 watcher.Close()
-                delete(tailFiles, fkey)
+                delete(tailFiles, fpath)
             }
 
         //case err, ok := <-watcher.Errors:
@@ -120,33 +119,167 @@ func TailToQueue(fkey string, fname string) error {
     return nil
 }
 
+func ParsePhpError(raw string) map[string]string {
+    tmp0 := strings.Split(raw[1:21], " ")
+    ymd := strings.Split(tmp0[0], "-")
+    createAt := fmt.Sprintf("%s-%s-%s %s", ymd[2], ymd[1], ymd[0], tmp0[1])
+    return map[string]string{"create_at": createAt, "msg": raw}
+}
+
+//日志示例：
+//[02-Jan-2019 23:58:19 Asia/Shanghai] PHP Fatal error:  Allowed memory size of 1073741824 bytes exhausted (tried to allocate 72 bytes) in /data/www/home-v3-cli/Service/Es/Admin/LogEsService.php on line 37
+//[03-Jan-2019 15:16:17 Asia/Shanghai] PHP Fatal error:  Uncaught exception 'PDOException' with message 'SQLSTATE[HY000]: General error: 2006 MySQL server has gone away' in /usr/local/nginx-1.8.1/html/Home-V4-Cli/Ypf/Lib/DatabaseV5.php:98
+//Stack trace:
+//#0 /usr/local/nginx-1.8.1/html/Home-V4-Cli/Ypf/Lib/DatabaseV5.php(98): PDOStatement->execute(Array)
+//#1 /usr/local/nginx-1.8.1/html/Home-V4-Cli/Ypf/Lib/DatabaseV5.php(343): Ypf\Lib\DatabaseV5->query('SELECT  *  FROM...', Array)
+//#2 /usr/local/nginx-1.8.1/html/Home-V4-Cli/home-v4-cli/Model/ExtendModel.php(94): Ypf\Lib\DatabaseV5->select()
+//#3 /usr/local/nginx-1.8.1/html/Home-V4-Cli/home-v4-cli/Service/Tsgz/Map/SituationMapService.php(1467): Model\ExtendModel->getListByWhere(Array, 0, 1, 'last_time desc')
+//#4 /usr/local/nginx-1.8.1/html/Home-V4-Cli/home-v4-cli/Service/Tsgz/Map/ChinaSituationMapService.php(695): Service\Tsgz\Map\SituationMapService->getNewRiskLog(Array)
+//#5 /usr/local/nginx-1.8.1/html/Home-V4-Cli/home-v4-cli/Service/Tsgz/Map/ChinaSituationMapService.php(169): Service\Tsgz\Map\ChinaSituationMapService->getNewT in /usr/local/nginx-1.8.1/html/Home-V4-Cli/Ypf/Lib/DatabaseV5.php on line 98
+//日志可以为多行，也可以为单行，完整的一条记录是以 [ 开头
+func TailPhpError(queue string, fpath string) error {
+    fmt.Println("TailPhpError")
+    fmt.Println(fpath)
+    isTail := 1
+    isWrite := 1
+    isRemove :=  0
+    finfo , err := os.Stat(fpath)
+    if err != nil {
+        return err
+    }
+    seek := finfo.Size()
+    tailConfig := tail.Config{Follow: true, MustExist: false, Logger: tail.DiscardingLogger}
+
+    watcher, err := fsnotify.NewWatcher()
+    if err != nil {
+        return err
+    }
+    err = watcher.Add(fpath)
+    if err != nil {
+        return err
+    }
+    tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
+    tailHandle, err := tail.TailFile(fpath, tailConfig)
+    tmp := ""
+    for {
+        if isRemove == 1 {
+            break
+        }
+        if isTail == 0 && isWrite == 1 {
+            tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
+            tailHandle, _ = tail.TailFile(fpath, tailConfig)
+            isTail = 1
+        }
+        select {
+        case line, ok := <- tailHandle.Lines:
+            if ok {
+                seek = seek + int64(len(line.Text)) + 1
+                if strings.HasPrefix(line.Text, "[") {    //独立的一行
+                    if tmp != "" {      //文件开始
+                        jdata := ParsePhpError(tmp)
+                        body, err := json.Encode(jdata)
+                        if err == nil {
+                            logQueue <- LogRecord{Queue: queue, Body: body}
+                        }
+                    }
+                    tmp = ""
+                }
+                if tmp != "" {
+                    tmp = tmp + "\n"
+                }
+                tmp = tmp + line.Text
+                total++
+            }
+
+        case event, ok := <-watcher.Events:
+            if ok && event.Op == fsnotify.Write {
+                isWrite = 1
+            }
+            if ok && (event.Op == fsnotify.Remove || event.Op == fsnotify.Rename) {
+                isRemove = 1       //删除/重命名
+                watcher.Close()
+                delete(tailFiles, fpath)
+            }
+
+        //case err, ok := <-watcher.Errors:
+        //    fmt.Println("goTail watcher error", err, ok)
+
+        case <- time.After(time.Second * 10):
+            isTail = 0           //超时
+            isWrite = 0
+            //多行日志
+            if tmp != "" {
+                jdata := ParsePhpError(tmp)
+                body, err := json.Encode(jdata)
+                if err == nil {
+                    logQueue <- LogRecord{Queue: queue, Body: body}
+                }
+            }
+            tailHandle.Stop()
+            //fmt.Println("goTail timeout")
+        }
+        if isTail == 0 && isWrite == 0 {
+            time.Sleep(time.Duration(1)*time.Second)
+        }
+    }
+    return nil
+}
+
 func DoWatch() {
-    docpre = strings.TrimSpace(viper.GetString("docpre"))
-    logpreTmp := strings.TrimSpace(viper.GetString("logpre"))
-    logdir := strings.TrimSpace(viper.GetString("logdir"))
-    _, err := os.Stat(logdir)
-	if os.IsNotExist(err) {
-        fmt.Println(logdir, "not exists")
-        os.Exit(1)
-	}
-    if !strings.HasSuffix(logdir, "/") {
-        logdir = logdir + "/"
-    }
-    if logpreTmp != "" {
-        logpre = logpreTmp
-    }
+    //timeout := strings.TrimSpace(viper.GetInt("timeout"))
+    docpre := strings.TrimSpace(viper.GetString("docpre"))
 
     go ToQueue()
-    globPrefix := logdir + logpre
     for {
-        fnames, err := filepath.Glob(globPrefix + "*.log")
-        if err == nil {
-            for _, fname := range fnames {
-                fkey := strings.TrimPrefix(fname, globPrefix)
-                fkey = strings.TrimSuffix(fkey, ".log")
-                if _, ok := tailFiles[fkey]; !ok {
-                    tailFiles[fkey] = fname
-                    go TailToQueue(fkey, fname)
+        //遍历监控
+        watches := viper.Get("watches").([]interface{})
+        for _, tmp := range watches {
+            row := tmp.(map[string]interface{})
+
+            //日志目录
+            logdir := row["logdir"].(string)
+            if !strings.HasSuffix(logdir, "/") {
+                logdir = logdir + "/"
+            }
+            _, err := os.Stat(logdir)
+	        if os.IsNotExist(err) {
+                fmt.Println(logdir, "not exists")
+                continue
+	        }
+
+            //匹配日志文件
+            glob := row["glob"].(string)
+            fpaths, err := filepath.Glob(logdir + glob)
+            if err != nil {
+                fmt.Println(logdir, "not exists")
+                continue
+            }
+
+            ttype := row["type"].(string)
+            queue := row["queue"].(string)
+            queueTrimPrefix := row["queueTrimPrefix"].(string)
+            queueTrimSuffix := row["queueTrimSuffix"].(string)
+            for _, fpath := range fpaths {
+                //队列名
+                fqueue := ""
+                fname := path.Base(fpath)
+                if queue == "*" {
+                    fqueue = strings.TrimPrefix(fname, queueTrimPrefix)
+                    fqueue = strings.TrimSuffix(fqueue, queueTrimSuffix)
+                } else {
+                    fqueue = queue
+                }
+                fqueue = docpre + fqueue
+
+                //监控
+                if _, ok := tailFiles[fname]; !ok {
+                    tailFiles[fname] = map[string]string{"fpath": fpath, "fname": fname, "queue": fqueue}
+                    if ttype == "ypf_error" {
+                        go TailYpfError(fqueue, fpath)
+                    }
+                    if ttype == "php_error" {
+                        go TailPhpError(fqueue, fpath)
+                    }
                 }
             }
         }
