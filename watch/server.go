@@ -49,8 +49,8 @@ func InitLog() {
 	//log.SetOutput(ioutil.Discard)
 	log.SetLevel(log.DebugLevel)
 	config := map[string]string{
-		"error":      viper.GetString("log_error"),
-		"info":       viper.GetString("log_info"),
+		//"error":      viper.GetString("log_error"),
+		"debug":       viper.GetString("logfile"),
 		"writeDelay": "1",
 		"cutType":    "day",
 	}

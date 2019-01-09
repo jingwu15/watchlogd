@@ -1,7 +1,10 @@
 {
     "timeout": 10,
+    "tail_timeout": 10,
+    "cachefile": "/tmp/.watchlogd.cache",
     "docpre": "prod_",
     "proc_title": "watchlogd",
+    "logfile": "/tmp/log_watchlog.log",
     "beanstalk": {
         "host": "127.0.0.1",
         "port" :"11300"
@@ -12,8 +15,8 @@
             "queue": "php_fatal_error",
             "logdir": "/tmp/",
             "glob": "php_error.log",
-            "queueTrimPrefix": "log_phperror_",
-            "queueTrimSuffix": ".log"
+            "queueTrimPrefix": "",
+            "queueTrimSuffix": ""
         },
         {
             "type": "ypf_error",
@@ -22,6 +25,14 @@
             "glob": "log_phperror_*.log",
             "queueTrimPrefix": "log_phperror_",
             "queueTrimSuffix": ".log"
+        },
+        {
+            "type": "log_queue",
+            "queue": "*",
+            "logdir": "/tmp/",
+            "glob": "log_queue.log",
+            "queueTrimPrefix": "",
+            "queueTrimSuffix": ""
         }
     ]
 }
