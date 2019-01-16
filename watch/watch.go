@@ -317,6 +317,6 @@ func DoWatch() {
                 }
             }
         }
-        time.Sleep(time.Duration(1)*time.Second)
+        time.Sleep(time.Duration(2)*time.Second)
     }
 }
