@@ -14,25 +14,31 @@
             "type": "php_error",
             "queue": "php_fatal_error",
             "logdir": "/tmp/",
-            "glob": "php_error.log",
-            "queueTrimPrefix": "",
-            "queueTrimSuffix": ""
+            "glob": "php_error.log"
         },
         {
             "type": "ypf_error",
             "queue": "*",
             "logdir": "/tmp/",
             "glob": "log_phperror_*.log",
-            "queueTrimPrefix": "log_phperror_",
-            "queueTrimSuffix": ".log"
+            "queue_match_file": {
+                "queuePrefix": "log_phperror_",
+                "queueSuffix": "",
+                "fnameTrimPrefix": "log_phperror_",
+                "fnameTrimSuffix": ".log"
+            }
         },
         {
             "type": "log_queue",
             "queue": "*",
             "logdir": "/tmp/",
             "glob": "log_queue.log",
-            "queueTrimPrefix": "",
-            "queueTrimSuffix": ""
+            "queue_match_file": {
+                "queuePrefix": "",
+                "queueSuffix": "",
+                "fnameTrimPrefix": "",
+                "fnameTrimSuffix": ""
+            }
         }
     ]
 }
