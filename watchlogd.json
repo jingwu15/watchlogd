@@ -6,15 +6,23 @@
     "proc_title": "watchlogd",
     "logfile": "/tmp/log_watchlog.log",
     "beanstalk": {
-        "host": "127.0.0.1",
+        "host": "beanstalk.yundun.com",
         "port" :"11300"
     },
     "watches": [
         {
             "type": "php_error",
-            "queue": "php_fatal_error",
-            "logdir": "/tmp/",
-            "glob": "php_error.log",
+            "queue": "log_php_fatal_error",
+            "logdir": "/usr/local/php-5.6.20/log/",
+            "glob": "php_admin_error.log",
+            "queueTrimPrefix": "",
+            "queueTrimSuffix": ""
+        },
+        {
+            "type": "php_error",
+            "queue": "log_php_fatal_error",
+            "logdir": "/usr/local/php-5.6.20/log/",
+            "glob": "fpm-php.www.error.log",
             "queueTrimPrefix": "",
             "queueTrimSuffix": ""
         },
