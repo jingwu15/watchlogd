@@ -1,5 +1,5 @@
 {
-    "timeout": 10,
+    "timeout": 2,
     "tail_timeout": 10,
     "cachefile": "/tmp/.watchlogd.cache",
     "docpre": "prod_",
@@ -14,33 +14,31 @@
             "type": "php_error",
             "queue": "log_php_fatal_error",
             "logdir": "/usr/local/php-5.6.20/log/",
-            "glob": "php_admin_error.log",
-            "queueTrimPrefix": "",
-            "queueTrimSuffix": ""
+            "glob": "php_admin_error.log"
         },
         {
             "type": "php_error",
             "queue": "log_php_fatal_error",
             "logdir": "/usr/local/php-5.6.20/log/",
-            "glob": "fpm-php.www.error.log",
-            "queueTrimPrefix": "",
-            "queueTrimSuffix": ""
+            "glob": "fpm-php.www.error.log"
         },
         {
             "type": "ypf_error",
             "queue": "*",
             "logdir": "/tmp/",
             "glob": "log_phperror_*.log",
-            "queueTrimPrefix": "log_phperror_",
-            "queueTrimSuffix": ".log"
+            "queue_match_file": {
+                "queuePrefix": "log_phperror_",
+                "queueSuffix": "",
+                "fnameTrimPrefix": "log_phperror_",
+                "fnameTrimSuffix": ".log"
+            }
         },
         {
             "type": "log_queue",
             "queue": "*",
             "logdir": "/tmp/",
-            "glob": "log_queue.log",
-            "queueTrimPrefix": "",
-            "queueTrimSuffix": ""
+            "glob": "log_queue.log"
         }
     ]
 }

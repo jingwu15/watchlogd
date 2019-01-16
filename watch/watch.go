@@ -255,7 +255,7 @@ func TailLoges(fpath string, timeout int) error {
 }
 
 func DoWatch() {
-    //timeout := strings.TrimSpace(viper.GetInt("timeout"))
+    timeout := viper.GetInt("timeout")
     timeoutTail := viper.GetInt("tail_timeout")
     docpre := strings.TrimSpace(viper.GetString("docpre"))
     log.Info("start")
@@ -288,19 +288,39 @@ func DoWatch() {
 
             ttype := row["type"].(string)
             queue := row["queue"].(string)
-            queueTrimPrefix := row["queueTrimPrefix"].(string)
-            queueTrimSuffix := row["queueTrimSuffix"].(string)
             for _, fpath := range fpaths {
                 //队列名
                 fqueue := ""
+
+                //文件各匹配队列名
+                queuePrefix := ""
+                queueSuffix := ""
+                fnameTrimPrefix := ""
+                fnameTrimSuffix := ""
+                if mfvalue, ok := row["queue_match_file"]; ok {
+                    matchFile := mfvalue.(map[string]interface{})
+                    if mvalue, ok := matchFile["queuePrefix"]; ok {
+                        queuePrefix = mvalue.(string)
+                    }
+                    if mvalue, ok := matchFile["queueSuffix"]; ok {
+                        queueSuffix = mvalue.(string)
+                    }
+                    if mvalue, ok := matchFile["fnameTrimPrefix"]; ok {
+                        fnameTrimPrefix = mvalue.(string)
+                    }
+                    if mvalue, ok := matchFile["fnameTrimSuffix"]; ok {
+                        fnameTrimSuffix = mvalue.(string)
+                    }
+                }
+
                 fname := path.Base(fpath)
                 if queue == "*" {
-                    fqueue = strings.TrimPrefix(fname, queueTrimPrefix)
-                    fqueue = strings.TrimSuffix(fqueue, queueTrimSuffix)
+                    fqueue = strings.TrimPrefix(fname, fnameTrimPrefix)
+                    fqueue = strings.TrimSuffix(fqueue, fnameTrimSuffix)
                 } else {
                     fqueue = queue
                 }
-                cqueue := docpre + fqueue
+                cqueue := docpre + queuePrefix + fqueue + queueSuffix
 
                 //监控
                 if _, ok := tailFiles[fpath]; !ok {
@@ -317,6 +337,6 @@ func DoWatch() {
                 }
             }
         }
-        time.Sleep(time.Duration(2)*time.Second)
+        time.Sleep(time.Duration(timeout)*time.Second)
     }
 }
