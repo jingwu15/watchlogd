@@ -320,8 +320,8 @@ func DoWatch() {
                 } else {
                     fqueue = queue
                 }
-                fqueue = queuePrefix + fqueue + queueSuffix
-                cqueue := docpre + fqueue
+                cqueue := docpre + queuePrefix + fqueue + queueSuffix
+                fmt.Println(fpath, fname, fqueue, cqueue)
 
                 //监控
                 if _, ok := tailFiles[fpath]; !ok {
