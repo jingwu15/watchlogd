@@ -6,7 +6,7 @@
     "proc_title": "watchlogd",
     "logfile": "/tmp/log_watchlog.log",
     "beanstalk": {
-        "host": "beanstalk.yundun.com",
+        "host": "beanstalklog250.yundun.com",
         "port" :"11300"
     },
     "watches": [
