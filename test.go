@@ -6,6 +6,7 @@ import (
     "fmt"
     //"bufio"
     //"bytes"
+    //"strings"
 	"github.com/spf13/viper"
 	log "github.com/sirupsen/logrus"
     "github.com/jingwu15/watchlogd/watch"

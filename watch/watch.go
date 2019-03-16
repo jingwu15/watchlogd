@@ -15,6 +15,7 @@ import (
     "github.com/hpcloud/tail"
     "github.com/fsnotify/fsnotify"
 	"github.com/jingwu15/golib/json"
+	jtime "github.com/jingwu15/golib/time"
 	log "github.com/sirupsen/logrus"
 	//"github.com/jingwu15/golib/logchan"
 	"github.com/jingwu15/golib/beanstalk"
@@ -125,7 +126,7 @@ func TailYpfError(queue string, syskey string, fpath string, timeout int) error 
 func ParsePhpError(raw string) map[string]string {
     tmp0 := strings.Split(raw[1:21], " ")
     ymd := strings.Split(tmp0[0], "-")
-    createAt := fmt.Sprintf("%s-%s-%s %s", ymd[2], ymd[1], ymd[0], tmp0[1])
+    createAt := fmt.Sprintf("%s-%s-%s %s", ymd[2], jtime.MonthEnToStr2(ymd[1]), ymd[0], tmp0[1])
     return map[string]string{"create_at": createAt, "msg": raw}
 }
 
@@ -208,7 +209,7 @@ func TailPhpError(queue string, fpath string, timeout int) error {
         case <- time.After(time.Second * time.Duration(timeout)):
             isTail = 0           //超时
             isWrite = 0
-            //多行日志
+            //多行日志 @todo 暂不支持
             if tmp != "" {
                 jdata := ParsePhpError(tmp)
                 body, err := json.Encode(jdata)
