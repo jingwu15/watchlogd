@@ -1,133 +1,143 @@
 package watch
 
 import (
-    "io"
-    "os"
-    //"log"
-    "fmt"
-    "path"
-    "time"
-    "bufio"
-    "strings"
-    //"unicode/utf8"
-    "path/filepath"
-    "github.com/spf13/viper"
-    "github.com/hpcloud/tail"
-    "github.com/fsnotify/fsnotify"
+	"io"
+	"os"
+	//"log"
+	"bufio"
+	"fmt"
+	"path"
+	"strings"
+	"time"
+	//"unicode/utf8"
+	"github.com/fsnotify/fsnotify"
+	"github.com/hpcloud/tail"
 	"github.com/jingwu15/golib/json"
 	jtime "github.com/jingwu15/golib/time"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
+	"path/filepath"
 	//"github.com/jingwu15/golib/logchan"
-	"github.com/jingwu15/golib/beanstalk"
+	libBS "github.com/jingwu15/golib/beanstalk"
 )
 
 type LogRecord struct {
-    Queue string
-    Body  []byte
+	Queue string
+	Body  []byte
 }
 
 var total = 0
 var tailFiles = make(map[string]map[string]string)
 var logQueue = make(chan LogRecord)
+var beanstalk *libBS.Beanstalk
+
+func InitConn() {
+	addr := fmt.Sprintf("%s:%s", viper.GetString("beanstalk.host"), viper.GetString("beanstalk.port"))
+	beanstalk, _ = libBS.New(addr)
+}
 
 func ToQueue() {
-    for {
-        select{
-        case record, ok := <- logQueue:
-            if ok {
-                _, err := beanstalk.Put(record.Queue, record.Body)
-                if err != nil {
-                    log.Error("beanstalk error: ", err)
-                }
-                total--
-            }
-        case <- time.After(time.Second * 10):
-            //fmt.Println("ToQueue timeout")
-        }
-    }
+	for {
+		select {
+		case record, ok := <-logQueue:
+			if ok {
+				err := beanstalk.Use(record.Queue)
+				if err != nil {
+					log.Error("beanstalk error: ", err)
+				}
+				_, err = beanstalk.Put(record.Body, 1, 0, 30)
+				if err != nil {
+					log.Error("beanstalk error: ", err)
+				}
+				total--
+			}
+		case <-time.After(time.Second * 10):
+			//fmt.Println("ToQueue timeout")
+		}
+	}
 }
 
 func TailYpfError(queue string, syskey string, fpath string, timeout int) error {
-    isTail := 1
-    isWrite := 1
-    isRemove :=  0
-    record := map[string]interface{}{}
-    finfo , err := os.Stat(fpath)
-    if err != nil {
-        return err
-    }
-    seek := finfo.Size()
-    tailConfig := tail.Config{Follow: true, MustExist: false, Logger: tail.DiscardingLogger}
+	isTail := 1
+	isWrite := 1
+	isRemove := 0
+	record := map[string]interface{}{}
+	finfo, err := os.Stat(fpath)
+	if err != nil {
+		return err
+	}
+	seek := finfo.Size()
+	tailConfig := tail.Config{Follow: true, MustExist: false, Logger: tail.DiscardingLogger}
 
-    watcher, err := fsnotify.NewWatcher()
-    if err != nil {
-        return err
-    }
-    err = watcher.Add(fpath)
-    if err != nil {
-        return err
-    }
-    tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
-    tailHandle, err := tail.TailFile(fpath, tailConfig)
-    for {
-        if isRemove == 1 {
-            break
-        }
-        if isTail == 0 && isWrite == 1 {
-            tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
-            tailHandle, _ = tail.TailFile(fpath, tailConfig)
-            isTail = 1
-        }
-        select {
-        case line, ok := <- tailHandle.Lines:
-            if ok {
-                seek = seek + int64(len(line.Text)) + 1
-                row := strings.Split(line.Text, "\t")
-                //json
-                err = json.Decode([]byte(row[1]), &record)
-                if err == nil {
-                    record["syskey"] = syskey
-                    body, err := json.Encode(record)
-                    if err == nil {
-                        logQueue <- LogRecord{Queue:queue, Body:body}
-                    }
-                } else {
-                    //非json 不处理
-                }
-                total++
-            }
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	err = watcher.Add(fpath)
+	if err != nil {
+		return err
+	}
+	tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
+	tailHandle, err := tail.TailFile(fpath, tailConfig)
+	for {
+		if isRemove == 1 {
+			break
+		}
+		if isTail == 0 && isWrite == 1 {
+			tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
+			tailHandle, _ = tail.TailFile(fpath, tailConfig)
+			isTail = 1
+		}
+		select {
+		case line, ok := <-tailHandle.Lines:
+			if ok {
+				seek = seek + int64(len(line.Text)) + 1
+				row := strings.Split(line.Text, "\t")
+				//json
+				err = json.Decode([]byte(row[1]), &record)
+				if err == nil {
+					record["syskey"] = syskey
+					body, err := json.Encode(record)
+					if err == nil {
+						logQueue <- LogRecord{Queue: queue, Body: body}
+					}
+				} else {
+					//非json 不处理
+				}
+				total++
+			}
 
-        case event, ok := <-watcher.Events:
-            if ok && event.Op == fsnotify.Write {
-                isWrite = 1
-            }
-            if ok && (event.Op == fsnotify.Remove || event.Op == fsnotify.Rename) {
-                isRemove = 1       //删除/重命名
-                watcher.Close()
-                delete(tailFiles, fpath)
-            }
+		case event, ok := <-watcher.Events:
+			if ok && event.Op == fsnotify.Write {
+				isWrite = 1
+			}
+			if ok && (event.Op == fsnotify.Remove || event.Op == fsnotify.Rename) {
+				isRemove = 1 //删除/重命名
+				watcher.Close()
+				delete(tailFiles, fpath)
+			}
 
-        //case err, ok := <-watcher.Errors:
-        //    fmt.Println("goTail watcher error", err, ok)
+		//case err, ok := <-watcher.Errors:
+		//    fmt.Println("goTail watcher error", err, ok)
 
-        case <- time.After(time.Second * time.Duration(timeout)):
-            isTail = 0           //超时
-            isWrite = 0
-            tailHandle.Stop()
-            //fmt.Println("goTail timeout")
-        }
-        if isTail == 0 && isWrite == 0 {
-            time.Sleep(time.Duration(1)*time.Second)
-        }
-    }
-    return nil
+		case <-time.After(time.Second * time.Duration(timeout)):
+			isTail = 0 //超时
+			isWrite = 0
+			tailHandle.Stop()
+			//fmt.Println("goTail timeout")
+		}
+		if isTail == 0 && isWrite == 0 {
+			time.Sleep(time.Duration(1) * time.Second)
+		}
+	}
+	return nil
 }
 
 func ParsePhpError(raw string) map[string]string {
-    tmp0 := strings.Split(raw[1:21], " ")
-    ymd := strings.Split(tmp0[0], "-")
-    createAt := fmt.Sprintf("%s-%s-%s %s", ymd[2], jtime.MonthEnToStr2(ymd[1]), ymd[0], tmp0[1])
-    return map[string]string{"create_at": createAt, "msg": raw}
+	tmp0 := strings.Split(raw[1:21], " ")
+	ymd := strings.Split(tmp0[0], "-")
+	createAt := fmt.Sprintf("%s-%s-%s %s", ymd[2], jtime.MonthEnToStr2(ymd[1]), ymd[0], tmp0[1])
+	return map[string]string{"create_at": createAt, "msg": raw}
 }
 
 //日志示例：
@@ -142,202 +152,202 @@ func ParsePhpError(raw string) map[string]string {
 //#5 /usr/local/nginx-1.8.1/html/Home-V4-Cli/home-v4-cli/Service/Tsgz/Map/ChinaSituationMapService.php(169): Service\Tsgz\Map\ChinaSituationMapService->getNewT in /usr/local/nginx-1.8.1/html/Home-V4-Cli/Ypf/Lib/DatabaseV5.php on line 98
 //日志可以为多行，也可以为单行，完整的一条记录是以 [ 开头
 func TailPhpError(queue string, fpath string, timeout int) error {
-    isTail := 1
-    isWrite := 1
-    isRemove :=  0
-    finfo , err := os.Stat(fpath)
-    if err != nil {
-        return err
-    }
-    seek := finfo.Size()
-    tailConfig := tail.Config{Follow: true, MustExist: false, Logger: tail.DiscardingLogger}
+	isTail := 1
+	isWrite := 1
+	isRemove := 0
+	finfo, err := os.Stat(fpath)
+	if err != nil {
+		return err
+	}
+	seek := finfo.Size()
+	tailConfig := tail.Config{Follow: true, MustExist: false, Logger: tail.DiscardingLogger}
 
-    watcher, err := fsnotify.NewWatcher()
-    if err != nil {
-        return err
-    }
-    err = watcher.Add(fpath)
-    if err != nil {
-        return err
-    }
-    tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
-    tailHandle, err := tail.TailFile(fpath, tailConfig)
-    tmp := ""
-    for {
-        if isRemove == 1 {
-            break
-        }
-        if isTail == 0 && isWrite == 1 {
-            tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
-            tailHandle, _ = tail.TailFile(fpath, tailConfig)
-            isTail = 1
-        }
-        select {
-        case line, ok := <- tailHandle.Lines:
-            if ok {
-                seek = seek + int64(len(line.Text)) + 1
-                if strings.HasPrefix(line.Text, "[") {    //独立的一行
-                    if tmp != "" {      //文件开始
-                        jdata := ParsePhpError(tmp)
-                        body, err := json.Encode(jdata)
-                        if err == nil {
-                            logQueue <- LogRecord{Queue: queue, Body: body}
-                        }
-                    }
-                    tmp = ""
-                }
-                if tmp != "" {
-                    tmp = tmp + "\n"
-                }
-                tmp = tmp + line.Text
-                total++
-            }
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	err = watcher.Add(fpath)
+	if err != nil {
+		return err
+	}
+	tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
+	tailHandle, err := tail.TailFile(fpath, tailConfig)
+	tmp := ""
+	for {
+		if isRemove == 1 {
+			break
+		}
+		if isTail == 0 && isWrite == 1 {
+			tailConfig.Location = &tail.SeekInfo{seek, os.SEEK_SET}
+			tailHandle, _ = tail.TailFile(fpath, tailConfig)
+			isTail = 1
+		}
+		select {
+		case line, ok := <-tailHandle.Lines:
+			if ok {
+				seek = seek + int64(len(line.Text)) + 1
+				if strings.HasPrefix(line.Text, "[") { //独立的一行
+					if tmp != "" { //文件开始
+						jdata := ParsePhpError(tmp)
+						body, err := json.Encode(jdata)
+						if err == nil {
+							logQueue <- LogRecord{Queue: queue, Body: body}
+						}
+					}
+					tmp = ""
+				}
+				if tmp != "" {
+					tmp = tmp + "\n"
+				}
+				tmp = tmp + line.Text
+				total++
+			}
 
-        case event, ok := <-watcher.Events:
-            if ok && event.Op == fsnotify.Write {
-                isWrite = 1
-            }
-            if ok && (event.Op == fsnotify.Remove || event.Op == fsnotify.Rename) {
-                isRemove = 1       //删除/重命名
-                watcher.Close()
-                delete(tailFiles, fpath)
-            }
+		case event, ok := <-watcher.Events:
+			if ok && event.Op == fsnotify.Write {
+				isWrite = 1
+			}
+			if ok && (event.Op == fsnotify.Remove || event.Op == fsnotify.Rename) {
+				isRemove = 1 //删除/重命名
+				watcher.Close()
+				delete(tailFiles, fpath)
+			}
 
-        //case err, ok := <-watcher.Errors:
-        //    fmt.Println("goTail watcher error", err, ok)
+		//case err, ok := <-watcher.Errors:
+		//    fmt.Println("goTail watcher error", err, ok)
 
-        case <- time.After(time.Second * time.Duration(timeout)):
-            isTail = 0           //超时
-            isWrite = 0
-            //多行日志 @todo 暂不支持
-            if tmp != "" {
-                jdata := ParsePhpError(tmp)
-                body, err := json.Encode(jdata)
-                if err == nil {
-                    logQueue <- LogRecord{Queue: queue, Body: body}
-                }
-            }
-            tailHandle.Stop()
-        }
-        if isTail == 0 && isWrite == 0 {
-            time.Sleep(time.Duration(1)*time.Second)
-        }
-    }
-    return nil
+		case <-time.After(time.Second * time.Duration(timeout)):
+			isTail = 0 //超时
+			isWrite = 0
+			//多行日志 @todo 暂不支持
+			if tmp != "" {
+				jdata := ParsePhpError(tmp)
+				body, err := json.Encode(jdata)
+				if err == nil {
+					logQueue <- LogRecord{Queue: queue, Body: body}
+				}
+			}
+			tailHandle.Stop()
+		}
+		if isTail == 0 && isWrite == 0 {
+			time.Sleep(time.Duration(1) * time.Second)
+		}
+	}
+	return nil
 }
 
 func TailLoges(fpath string, timeout int) error {
-    _, err := os.Stat(fpath)
+	_, err := os.Stat(fpath)
 	if os.IsNotExist(err) {
-        log.Error(err)
-        return err
+		log.Error(err)
+		return err
 	}
-    npath := fpath + ".tmp"
-    os.Rename(fpath, npath)
-    fp, err := os.Open(npath)
-    if err != nil {
-        log.Error(err)
-        return err
-    }
-    reader := bufio.NewReader(fp)
-    for {
-        line, err := reader.ReadString('\n')
-        if err != nil && io.EOF == err {
-            break
-        }
-        row := strings.Split(line, "\t")
-        queue := row[1]
-        body := []byte(row[2])
-        logQueue <- LogRecord{Queue: queue, Body: body}
-    }
-    delete(tailFiles, fpath)
-    os.Remove(npath)
-    return nil
+	npath := fpath + ".tmp"
+	os.Rename(fpath, npath)
+	fp, err := os.Open(npath)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	reader := bufio.NewReader(fp)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && io.EOF == err {
+			break
+		}
+		row := strings.Split(line, "\t")
+		queue := row[1]
+		body := []byte(row[2])
+		logQueue <- LogRecord{Queue: queue, Body: body}
+	}
+	delete(tailFiles, fpath)
+	os.Remove(npath)
+	return nil
 }
 
 func DoWatch() {
-    timeout := viper.GetInt("timeout")
-    timeoutTail := viper.GetInt("tail_timeout")
-    docpre := strings.TrimSpace(viper.GetString("docpre"))
-    log.Info("start")
+	timeout := viper.GetInt("timeout")
+	timeoutTail := viper.GetInt("tail_timeout")
+	docpre := strings.TrimSpace(viper.GetString("docpre"))
+	log.Info("start")
 
-    go ToQueue()
-    for {
-        //遍历监控
-        watches := viper.Get("watches").([]interface{})
-        for _, tmp := range watches {
-            row := tmp.(map[string]interface{})
+	go ToQueue()
+	for {
+		//遍历监控
+		watches := viper.Get("watches").([]interface{})
+		for _, tmp := range watches {
+			row := tmp.(map[string]interface{})
 
-            //日志目录
-            logdir := row["logdir"].(string)
-            if !strings.HasSuffix(logdir, "/") {
-                logdir = logdir + "/"
-            }
-            _, err := os.Stat(logdir)
-	        if os.IsNotExist(err) {
-                log.Error(err)
-                continue
-	        }
+			//日志目录
+			logdir := row["logdir"].(string)
+			if !strings.HasSuffix(logdir, "/") {
+				logdir = logdir + "/"
+			}
+			_, err := os.Stat(logdir)
+			if os.IsNotExist(err) {
+				log.Error(err)
+				continue
+			}
 
-            //匹配日志文件
-            glob := row["glob"].(string)
-            fpaths, err := filepath.Glob(logdir + glob)
-            if err != nil {
-                log.Error(logdir + " not exists")
-                continue
-            }
+			//匹配日志文件
+			glob := row["glob"].(string)
+			fpaths, err := filepath.Glob(logdir + glob)
+			if err != nil {
+				log.Error(logdir + " not exists")
+				continue
+			}
 
-            ttype := row["type"].(string)
-            queue := row["queue"].(string)
-            for _, fpath := range fpaths {
-                //队列名
-                fqueue := ""
+			ttype := row["type"].(string)
+			queue := row["queue"].(string)
+			for _, fpath := range fpaths {
+				//队列名
+				fqueue := ""
 
-                //文件各匹配队列名
-                queuePrefix := ""
-                queueSuffix := ""
-                fnameTrimPrefix := ""
-                fnameTrimSuffix := ""
-                if mfvalue, ok := row["queue_match_file"]; ok {
-                    matchFile := mfvalue.(map[string]interface{})
-                    if mvalue, ok := matchFile["queuePrefix"]; ok {
-                        queuePrefix = mvalue.(string)
-                    }
-                    if mvalue, ok := matchFile["queueSuffix"]; ok {
-                        queueSuffix = mvalue.(string)
-                    }
-                    if mvalue, ok := matchFile["fnameTrimPrefix"]; ok {
-                        fnameTrimPrefix = mvalue.(string)
-                    }
-                    if mvalue, ok := matchFile["fnameTrimSuffix"]; ok {
-                        fnameTrimSuffix = mvalue.(string)
-                    }
-                }
+				//文件各匹配队列名
+				queuePrefix := ""
+				queueSuffix := ""
+				fnameTrimPrefix := ""
+				fnameTrimSuffix := ""
+				if mfvalue, ok := row["queue_match_file"]; ok {
+					matchFile := mfvalue.(map[string]interface{})
+					if mvalue, ok := matchFile["queuePrefix"]; ok {
+						queuePrefix = mvalue.(string)
+					}
+					if mvalue, ok := matchFile["queueSuffix"]; ok {
+						queueSuffix = mvalue.(string)
+					}
+					if mvalue, ok := matchFile["fnameTrimPrefix"]; ok {
+						fnameTrimPrefix = mvalue.(string)
+					}
+					if mvalue, ok := matchFile["fnameTrimSuffix"]; ok {
+						fnameTrimSuffix = mvalue.(string)
+					}
+				}
 
-                fname := path.Base(fpath)
-                if queue == "*" {
-                    fqueue = strings.TrimPrefix(fname, fnameTrimPrefix)
-                    fqueue = strings.TrimSuffix(fqueue, fnameTrimSuffix)
-                } else {
-                    fqueue = queue
-                }
-                cqueue := docpre + queuePrefix + fqueue + queueSuffix
+				fname := path.Base(fpath)
+				if queue == "*" {
+					fqueue = strings.TrimPrefix(fname, fnameTrimPrefix)
+					fqueue = strings.TrimSuffix(fqueue, fnameTrimSuffix)
+				} else {
+					fqueue = queue
+				}
+				cqueue := docpre + queuePrefix + fqueue + queueSuffix
 
-                //监控
-                if _, ok := tailFiles[fpath]; !ok {
-                    tailFiles[fpath] = map[string]string{"fpath": fpath, "fname": fname, "queue": fqueue}
-                    if ttype == "ypf_error" {
-                        go TailYpfError(cqueue, fqueue, fpath, timeoutTail)
-                    }
-                    if ttype == "php_error" {
-                        go TailPhpError(cqueue, fpath, timeoutTail)
-                    }
-                    if ttype == "log_queue" {
-                        go TailLoges(fpath, timeoutTail)
-                    }
-                }
-            }
-        }
-        time.Sleep(time.Duration(timeout)*time.Second)
-    }
+				//监控
+				if _, ok := tailFiles[fpath]; !ok {
+					tailFiles[fpath] = map[string]string{"fpath": fpath, "fname": fname, "queue": fqueue}
+					if ttype == "ypf_error" {
+						go TailYpfError(cqueue, fqueue, fpath, timeoutTail)
+					}
+					if ttype == "php_error" {
+						go TailPhpError(cqueue, fpath, timeoutTail)
+					}
+					if ttype == "log_queue" {
+						go TailLoges(fpath, timeoutTail)
+					}
+				}
+			}
+		}
+		time.Sleep(time.Duration(timeout) * time.Second)
+	}
 }

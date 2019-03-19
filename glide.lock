@@ -1,8 +1,6 @@
-hash: 2c991d1b8efde7ad25028bcb9a6fccba80829f749700a7283289883c4ee8108a
-updated: 2019-01-07T21:08:16.397945815+08:00
+hash: 453dbd3fe480bf691be04020ffaf72fb11d9a2ff305b5db824c24eebf51f2ada
+updated: 2019-03-19T11:37:23.154262266+08:00
 imports:
-- name: github.com/beanstalkd/go-beanstalk
-  version: 53ecdaa3bcfb4408ac90ddb486122d4d2a2b9b95
 - name: github.com/buger/jsonparser
   version: bf1c66bbce23153d89b23f8960071a680dbef54b
 - name: github.com/fsnotify/fsnotify
@@ -29,14 +27,15 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jingwu15/golib
-  version: ccc83ba73a22a808aff5bc53d6d9a2f77d06e7e8
+  version: 91122c796d795ae03cff68eefe8c519f114ee867
   subpackages:
   - beanstalk
   - json
   - logchan
   - misc
+  - time
 - name: github.com/json-iterator/go
-  version: d05f387f50c0c406889b62cb5ec51c76a64d89ee
+  version: 0ff49de124c6f76f8494e194af75bde0f1a49a29
 - name: github.com/konsorten/go-windows-terminal-sequences
   version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/magiconair/properties
@@ -50,7 +49,7 @@ imports:
 - name: github.com/pelletier/go-toml
   version: 27c6b39a135b7dc87a14afb068809132fb7a9a8f
 - name: github.com/sirupsen/logrus
-  version: e1e72e9de974bd926e5c56f83753fba2df402ce5
+  version: dae0fa8d5b0c810a8ab733fbd5510c7cae84eca4
 - name: github.com/spf13/afero
   version: a5d6946387efe7d64d09dcba68cdd523dc1273a3
   subpackages:
@@ -64,13 +63,29 @@ imports:
 - name: github.com/spf13/pflag
   version: 24fa6976df40757dce6aea913e7b81ade90530e1
 - name: github.com/spf13/viper
-  version: 6d33b5a963d922d182c91e8a1c88d81fd150cfd4
+  version: 9e56dacc08fbbf8c9ee2dbc717553c758ce42bc9
 - name: golang.org/x/crypto
   version: ff983b9c42bc9fbf91556e191cc8efb585c16908
   repo: https://github.com/golang/crypto
   vcs: git
   subpackages:
   - ssh/terminal
+- name: golang.org/x/gddo
+  version: 9bd4a32950217197bb319565e843237cca7f85d2
+  repo: https://github.com/golang/gddo
+  vcs: git
+- name: golang.org/x/lint
+  version: 8f45f776aaf18cebc8d65861cc70c33c60471952
+  repo: https://github.com/golang/lint
+  vcs: git
+- name: golang.org/x/net
+  version: 1e06a53dbb7e2ed46e91183f219db23c6943c532
+  repo: https://github.com/golang/net
+  vcs: git
+- name: golang.org/x/protobuf
+  version: 347cf4a86c1cb8d262994d8ef5924d4576c5b331
+  repo: https://github.com/golang/protobuf
+  vcs: git
 - name: golang.org/x/sys
   version: cb59ee3660675d463e86971646692ea3e470021c
   repo: https://github.com/golang/sys
@@ -85,6 +100,10 @@ imports:
   subpackages:
   - transform
   - unicode/norm
+- name: golang.org/x/tools
+  version: 421f03a57a641a72b8ea4ceb640e73391675fc6f
+  repo: https://github.com/golang/tools
+  vcs: git
 - name: gopkg.in/fsnotify.v1
   version: 7be54206639f256967dd82fa767397ba5f8f48f5
 - name: gopkg.in/tomb.v1
