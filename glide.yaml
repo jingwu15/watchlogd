@@ -5,6 +5,7 @@ import:
 - package: github.com/hpcloud/tail
   version: ^1.0.0
 - package: github.com/jingwu15/golib
+  version: 0.1.3
   subpackages:
   - beanstalk
   - json

@@ -1,23 +1,24 @@
 package watch
 
 import (
-	"os"
-	"time"
 	"bytes"
-	"syscall"
-	"strconv"
-	"strings"
-	"os/exec"
+	"github.com/spf13/viper"
 	"io/ioutil"
+	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"github.com/spf13/viper"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
 	//"github.com/erikdubbelboer/gspt"
-	log "github.com/sirupsen/logrus"
 	logchan "github.com/jingwu15/golib/logchan"
+	log "github.com/sirupsen/logrus"
 )
 
 var runFlag int = 1
+
 func findProcess(procTitle string) ([]int, error) {
 	var err error
 	matches, err := filepath.Glob("/proc/*/cmdline")
@@ -50,7 +51,7 @@ func InitLog() {
 	log.SetLevel(log.DebugLevel)
 	config := map[string]string{
 		//"error":      viper.GetString("log_error"),
-		"debug":       viper.GetString("logfile"),
+		"debug":      viper.GetString("logfile"),
 		"writeDelay": "1",
 		"cutType":    "day",
 	}
@@ -73,7 +74,7 @@ func handleSignals() {
 		case syscall.SIGTERM:
 			log.Info("stop")
 			logchan.LogClose()
-            runFlag = 0
+			runFlag = 0
 		case syscall.SIGUSR2:
 			log.Info("restart")
 			logchan.LogClose()
@@ -88,22 +89,23 @@ func Run() {
 
 	go handleSignals()
 	InitLog()
+	InitConn()
 
-    //执行
+	//执行
 	go DoWatch()
-    log.Info(procTitle + " is running")
-    //done := make(chan bool)
-    //<-done
-    for {
-        if runFlag == 1 {
-            //未结束，一直等待
-            time.Sleep(time.Duration(2)*time.Second)
-            //log.Info(procTitle + " is running")
-        } else {
-            log.Info(procTitle + " is shut down")
-            break;
-        }
-    }
+	log.Info(procTitle + " is running")
+	//done := make(chan bool)
+	//<-done
+	for {
+		if runFlag == 1 {
+			//未结束，一直等待
+			time.Sleep(time.Duration(2) * time.Second)
+			//log.Info(procTitle + " is running")
+		} else {
+			log.Info(procTitle + " is shut down")
+			break
+		}
+	}
 }
 
 func Start() {
@@ -114,12 +116,12 @@ func Start() {
 	client := exec.Command("sh", "-c", cmd)
 	err = client.Start()
 	if err != nil {
-		log.Info(procTitle + " start error:", err)
+		log.Info(procTitle+" start error:", err)
 		return
 	}
 	err = client.Wait()
 	if err != nil {
-		log.Info(procTitle + " start error:", err)
+		log.Info(procTitle+" start error:", err)
 		return
 	}
 	log.Info(procTitle + " is started")
